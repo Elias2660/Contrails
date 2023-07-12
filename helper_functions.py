@@ -5,9 +5,12 @@ import matplotlib.pyplot as plt
 from IPython import display
 import sklearn
 import pandas as pd
+from pathlib import Path
+# path for pushing to kaggle is '/kaggle/input/google-research-identify-contrails-reduce-global-warming'
+data_path = Path('./kaggle/input/google-research-identify-contrails-reduce-global-warming')
 
 #function to return data of a specific data object
-def extract_data_files(record_id):
+def extract_data_files(record_id, data_path = data_path):
     """
     extract_data_files(record_id) -> files (dictionary of numpy_files)
     #CONTRACT
@@ -21,7 +24,7 @@ def extract_data_files(record_id):
     don't forget to change the directory when one is about to push a notebook to kaggle
     """
     #base dir for kaggle is /kaggle/input/google-research-identify-contrails-reduce-global-warming/train
-    BASE_DIR = 'utils/data'
+    BASE_DIR = data_path
 
     files = {}
 
@@ -96,7 +99,6 @@ def display_individial_human_masks(data):
         plt.imshow(data["humanindividualmasks"][..., i], interpolation='none')
 
 def display_3d(data):
-
     """
     display_3d(data) -> return 3D simulation
     #DESCRIPTION
@@ -125,22 +127,73 @@ def display_3d(data):
     display.display(display.HTML(anim.to_jshtml()))
 
 
-def get_metadata(path = "utils/metadata"):
+def get_metadata(data_path = data_path):
     """
-    get_metadata(path = "utils/metadata") -> metadata
+    get_metadata(path = data_path) -> metadata
     #DESCRIPTION
     Returns the metadata for the competition from a json file to a pandas dataframe
 
     #CONTRACT
     path: path to the metadata file
     """
-    metadata = pd.read_json(path + "/train_metadata.json")
+    metadata = pd.read_json(os.path.join(data_path, "train_metadata.json"))
 
     return metadata
 
 
-from tensorflow.keras.utils import image_dataset_from_directory
+def rle_encode(x, fg_val=1):
+    """
+    Args:
+        x:  numpy array of shape (height, width), 1 - mask, 0 - background
+    Returns: run length encoding as list
+    """
 
-def get_data(path):
-    #given a path to a directory, return the data in that directory as a pandas dataframe  
-    ...
+    dots = np.where(
+        x.T.flatten() == fg_val)[0]  # .T sets Fortran order down-then-right
+    run_lengths = []
+    prev = -2
+    
+    for b in dots:
+        if b > prev + 1:
+            run_lengths.extend((b + 1, 0))
+        run_lengths[-1] += 1
+        prev = b
+    return run_lengths
+
+
+def list_to_string(x):
+    """
+    Converts list to a string representation
+    Empty list returns '-'
+    """
+    if x: # non-empty list
+        s = str(x).replace("[", "").replace("]", "").replace(",", "")
+    else:
+        s = '-'
+    return s
+
+
+def rle_decode(mask_rle, shape=(256, 256)):
+    '''
+    mask_rle: run-length as string formatted (start length)
+              empty predictions need to be encoded with '-'
+    shape: (height, width) of array to return 
+    Returns numpy array, 1 - mask, 0 - background
+    '''
+
+    img = np.zeros(shape[0]*shape[1], dtype=np.uint8)
+    if mask_rle != '-': 
+        s = mask_rle.split()
+        starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
+        starts -= 1
+        ends = starts + lengths
+        for lo, hi in zip(starts, ends):
+            img[lo:hi] = 1
+    return img.reshape(shape, order='F')  # Needed to align to RLE direction
+
+
+def dice_coefficient(y_true, y_pred, smooth=1e-6):
+   y_true_f = y_true.flatten()
+   y_pred_f = y_pred.flatten()
+   intersection = np.sum(y_true_f * y_pred_f)
+   return (2. * intersection + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
