@@ -11,7 +11,7 @@ contourpy==1.1.0
 cycler==0.12.1
 debugpy==1.6.7
 decorator==5.1.1
-executing==1.2.0
+executing==2.0.1
 flatbuffers==24.3.7
 fonttools==4.50.0
 gast==0.5.4
